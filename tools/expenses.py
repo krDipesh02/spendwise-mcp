@@ -10,6 +10,7 @@ except ImportError as e:
     raise ImportError("fastmcp is required to run expense tools") from e
 
 from client import CategoryMatch, SpendwiseClient
+from logging_utils import instrument_tool
 
 
 # =========================
@@ -35,21 +36,6 @@ class DeleteResponse(TypedDict):
 # Internal Helpers
 # =========================
 
-async def _resolve_api_key(
-    client: SpendwiseClient,
-    telegram_user_id: str,
-    telegram_username: str | None = None,
-    first_name: str | None = None,
-    last_name: str | None = None,
-) -> str:
-    return await client.get_api_key_for_telegram(
-        telegram_user_id,
-        telegram_username=telegram_username,
-        first_name=first_name,
-        last_name=last_name,
-    )
-
-
 def _validate_iso_date(raw: str, *, field_name: str) -> None:
     try:
         date.fromisoformat(raw)
@@ -70,7 +56,7 @@ def _clean_optional(value: str | None) -> str | None:
 
 def register_expense_tools(mcp: FastMCP, client: SpendwiseClient) -> None:
 
-    @mcp.tool(
+    @instrument_tool(mcp,
         name="expenses_list",
         description="List expenses for a Telegram-linked user. Supports optional date filters.",
     )
@@ -78,51 +64,29 @@ def register_expense_tools(mcp: FastMCP, client: SpendwiseClient) -> None:
         telegram_user_id: str,
         from_date: str | None = None,
         to_date: str | None = None,
-        telegram_username: str | None = None,
-        first_name: str | None = None,
-        last_name: str | None = None,
     ) -> List[Expense]:
         if from_date:
             _validate_iso_date(from_date, field_name="from_date")
         if to_date:
             _validate_iso_date(to_date, field_name="to_date")
 
-        api_key = await _resolve_api_key(
-            client,
-            telegram_user_id,
-            telegram_username,
-            first_name,
-            last_name,
-        )
-
         return await client.list_expenses(
-            api_key=api_key,
+            telegram_user_id=telegram_user_id,
             from_date=from_date,
             to_date=to_date,
         )
 
-    @mcp.tool(
+    @instrument_tool(mcp,
         name="expense_get",
         description="Fetch a single expense by ID.",
     )
     async def expense_get(
         telegram_user_id: str,
         expense_id: str,
-        telegram_username: str | None = None,
-        first_name: str | None = None,
-        last_name: str | None = None,
     ) -> Expense:
-        api_key = await _resolve_api_key(
-            client,
-            telegram_user_id,
-            telegram_username,
-            first_name,
-            last_name,
-        )
+        return await client.get_expense(expense_id, telegram_user_id=telegram_user_id)
 
-        return await client.get_expense(expense_id, api_key=api_key)
-
-    @mcp.tool(
+    @instrument_tool(mcp,
         name="expense_create",
         description=(
             "Create a new expense. Amount and category_name are required. "
@@ -139,21 +103,10 @@ def register_expense_tools(mcp: FastMCP, client: SpendwiseClient) -> None:
         category_name: str | None = None,
         category_id: str | None = None,
         receipt_id: str | None = None,
-        telegram_username: str | None = None,
-        first_name: str | None = None,
-        last_name: str | None = None,
     ) -> Expense:
-        api_key = await _resolve_api_key(
-            client,
-            telegram_user_id,
-            telegram_username,
-            first_name,
-            last_name,
-        )
-
         payload = await build_expense_payload(
             client,
-            api_key=api_key,
+            telegram_user_id=telegram_user_id,
             amount=amount,
             currency=currency,
             spent_at=spent_at,
@@ -164,9 +117,9 @@ def register_expense_tools(mcp: FastMCP, client: SpendwiseClient) -> None:
             receipt_id=receipt_id,
         )
 
-        return await client.create_expense(payload, api_key=api_key)
+        return await client.create_expense(payload, telegram_user_id=telegram_user_id)
 
-    @mcp.tool(
+    @instrument_tool(mcp,
         name="expense_update",
         description="Update an existing expense.",
     )
@@ -181,21 +134,10 @@ def register_expense_tools(mcp: FastMCP, client: SpendwiseClient) -> None:
         category_name: str | None = None,
         category_id: str | None = None,
         receipt_id: str | None = None,
-        telegram_username: str | None = None,
-        first_name: str | None = None,
-        last_name: str | None = None,
     ) -> Expense:
-        api_key = await _resolve_api_key(
-            client,
-            telegram_user_id,
-            telegram_username,
-            first_name,
-            last_name,
-        )
-
         payload = await build_expense_payload(
             client,
-            api_key=api_key,
+            telegram_user_id=telegram_user_id,
             amount=amount,
             currency=currency,
             spent_at=spent_at,
@@ -206,28 +148,17 @@ def register_expense_tools(mcp: FastMCP, client: SpendwiseClient) -> None:
             receipt_id=receipt_id,
         )
 
-        return await client.update_expense(expense_id, payload, api_key=api_key)
+        return await client.update_expense(expense_id, payload, telegram_user_id=telegram_user_id)
 
-    @mcp.tool(
+    @instrument_tool(mcp,
         name="expense_delete",
         description="Delete an expense by ID.",
     )
     async def expense_delete(
         telegram_user_id: str,
         expense_id: str,
-        telegram_username: str | None = None,
-        first_name: str | None = None,
-        last_name: str | None = None,
     ) -> DeleteResponse:
-        api_key = await _resolve_api_key(
-            client,
-            telegram_user_id,
-            telegram_username,
-            first_name,
-            last_name,
-        )
-
-        await client.delete_expense(expense_id, api_key=api_key)
+        await client.delete_expense(expense_id, telegram_user_id=telegram_user_id)
 
         return {"status": "deleted", "expense_id": expense_id}
 
@@ -239,7 +170,7 @@ def register_expense_tools(mcp: FastMCP, client: SpendwiseClient) -> None:
 async def build_expense_payload(
     client: SpendwiseClient,
     *,
-    api_key: str,
+    telegram_user_id: str,
     amount: float,
     currency: str,
     spent_at: str,
@@ -262,7 +193,7 @@ async def build_expense_payload(
     if not resolved_category_id and category_name:
         resolved_category_id = await resolve_category_id(
             client,
-            api_key=api_key,
+            telegram_user_id=telegram_user_id,
             category_name=category_name,
         )
 
@@ -284,7 +215,7 @@ async def build_expense_payload(
 async def resolve_category_id(
     client: SpendwiseClient,
     *,
-    api_key: str,
+    telegram_user_id: str,
     category_name: str,
 ) -> str:
     normalized_name = category_name.strip().casefold()
@@ -292,7 +223,7 @@ async def resolve_category_id(
     if not normalized_name:
         raise ValueError("`category_name` cannot be blank.")
 
-    categories = await client.list_categories(api_key=api_key)
+    categories = await client.list_categories(telegram_user_id=telegram_user_id)
 
     matches = [
         CategoryMatch(id=c["id"], name=c["name"])

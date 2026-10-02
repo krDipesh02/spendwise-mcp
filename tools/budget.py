@@ -8,6 +8,7 @@ except ImportError as e:
     raise ImportError("fastmcp is required to run budget tools") from e
 
 from client import SpendwiseClient
+from logging_utils import instrument_tool
 
 
 class BudgetStatus(TypedDict):
@@ -22,21 +23,6 @@ class BudgetStatus(TypedDict):
 # =========================
 # Internal Helpers
 # =========================
-
-async def _resolve_api_key(
-    client: SpendwiseClient,
-    telegram_user_id: str,
-    telegram_username: str | None = None,
-    first_name: str | None = None,
-    last_name: str | None = None,
-) -> str:
-    return await client.get_api_key_for_telegram(
-        telegram_user_id,
-        telegram_username=telegram_username,
-        first_name=first_name,
-        last_name=last_name,
-    )
-
 
 def _validate_month(month: str) -> None:
     try:
@@ -53,7 +39,7 @@ def _validate_month(month: str) -> None:
 
 def register_budget_tools(mcp: FastMCP, client: SpendwiseClient) -> None:
 
-    @mcp.tool(
+    @instrument_tool(mcp,
         name="budget_set",
         description="Creates or updates a monthly budget for the user. Category is optional (overall budget if not provided).",
     )
@@ -62,19 +48,8 @@ def register_budget_tools(mcp: FastMCP, client: SpendwiseClient) -> None:
         month: str,
         amount: float,
         category_id: str | None = None,
-        telegram_username: str | None = None,
-        first_name: str | None = None,
-        last_name: str | None = None,
     ) -> BudgetStatus:
         _validate_month(month)
-
-        api_key = await _resolve_api_key(
-            client,
-            telegram_user_id,
-            telegram_username,
-            first_name,
-            last_name,
-        )
 
         payload: dict[str, Any] = {
             "month": month,
@@ -83,27 +58,16 @@ def register_budget_tools(mcp: FastMCP, client: SpendwiseClient) -> None:
         if category_id is not None:
             payload["categoryId"] = category_id
 
-        return await client.set_budget(payload, api_key=api_key)
+        return await client.set_budget(payload, telegram_user_id=telegram_user_id)
 
-    @mcp.tool(
+    @instrument_tool(mcp,
         name="budget_status_get",
         description="Returns the authenticated user's budget status entries for a given month.",
     )
     async def budget_status_get(
         telegram_user_id: str,
         month: str,
-        telegram_username: str | None = None,
-        first_name: str | None = None,
-        last_name: str | None = None,
     ) -> List[BudgetStatus]:
         _validate_month(month)
 
-        api_key = await _resolve_api_key(
-            client,
-            telegram_user_id,
-            telegram_username,
-            first_name,
-            last_name,
-        )
-
-        return await client.get_budget_status(month, api_key=api_key)
+        return await client.get_budget_status(month, telegram_user_id=telegram_user_id)

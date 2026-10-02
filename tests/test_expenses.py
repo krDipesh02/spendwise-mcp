@@ -9,15 +9,15 @@ class FakeClient:
     def __init__(self, categories=None) -> None:
         self.categories = categories or []
 
-    async def list_categories(self, *, api_key: str):
-        assert api_key == "key-1"
+    async def list_categories(self, *, telegram_user_id: str):
+        assert telegram_user_id == "tg-1"
         return self.categories
 
 
 @pytest.mark.asyncio
 async def test_resolve_category_id_case_insensitive() -> None:
     client = FakeClient(categories=[{"id": "cat-1", "name": "Groceries"}])
-    category_id = await resolve_category_id(client, api_key="key-1", category_name=" groceries ")
+    category_id = await resolve_category_id(client, telegram_user_id="tg-1", category_name=" groceries ")
     assert category_id == "cat-1"
 
 
@@ -25,7 +25,7 @@ async def test_resolve_category_id_case_insensitive() -> None:
 async def test_resolve_category_id_rejects_missing_match() -> None:
     client = FakeClient(categories=[{"id": "cat-1", "name": "Groceries"}])
     with pytest.raises(ValueError) as exc:
-        await resolve_category_id(client, api_key="key-1", category_name="Travel")
+        await resolve_category_id(client, telegram_user_id="tg-1", category_name="Travel")
     assert "No category found" in str(exc.value)
 
 
@@ -38,8 +38,8 @@ async def test_resolve_category_id_rejects_ambiguous_match() -> None:
         ]
     )
     with pytest.raises(ValueError) as exc:
-        await resolve_category_id(client, api_key="key-1", category_name="travel")
-    assert "ambiguous" in str(exc.value)
+        await resolve_category_id(client, telegram_user_id="tg-1", category_name="travel")
+    assert "ambiguous" in str(exc.value).lower()
 
 
 @pytest.mark.asyncio
@@ -47,7 +47,7 @@ async def test_build_expense_payload_prefers_explicit_category_id() -> None:
     client = FakeClient(categories=[{"id": "cat-1", "name": "Groceries"}])
     payload = await build_expense_payload(
         client,
-        api_key="key-1",
+        telegram_user_id="tg-1",
         amount=12.5,
         currency="usd",
         spent_at="2026-03-29",
@@ -69,7 +69,7 @@ async def test_build_expense_payload_resolves_category_name() -> None:
     client = FakeClient(categories=[{"id": "cat-1", "name": "Groceries"}])
     payload = await build_expense_payload(
         client,
-        api_key="key-1",
+        telegram_user_id="tg-1",
         amount=12.5,
         currency="usd",
         spent_at="2026-03-29",
@@ -88,7 +88,7 @@ async def test_build_expense_payload_rejects_invalid_date() -> None:
     with pytest.raises(ValueError) as exc:
         await build_expense_payload(
             client,
-            api_key="key-1",
+            telegram_user_id="tg-1",
             amount=12.5,
             currency="usd",
             spent_at="03/29/2026",

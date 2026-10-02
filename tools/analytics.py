@@ -10,6 +10,7 @@ except ImportError as e:
     raise ImportError("fastmcp is required to run analytics tools") from e
 
 from client import SpendwiseClient
+from logging_utils import instrument_tool
 
 class CategorySummary(TypedDict):
     category: str
@@ -29,38 +30,6 @@ class MonthlySummary(TypedDict):
 # =========================
 # Internal Helpers
 # =========================
-
-async def _user_api_key(
-    client: SpendwiseClient,
-    telegram_user_id: str,
-    *,
-    telegram_username: str | None = None,
-    first_name: str | None = None,
-    last_name: str | None = None,
-) -> str:
-    return await client.get_api_key_for_telegram(
-        telegram_user_id,
-        telegram_username=telegram_username,
-        first_name=first_name,
-        last_name=last_name,
-    )
-
-
-async def _resolve_api_key(
-    client: SpendwiseClient,
-    telegram_user_id: str,
-    telegram_username: str | None = None,
-    first_name: str | None = None,
-    last_name: str | None = None,
-) -> str:
-    return await _user_api_key(
-        client,
-        telegram_user_id,
-        telegram_username=telegram_username,
-        first_name=first_name,
-        last_name=last_name,
-    )
-
 
 def _validate_month(month: str) -> None:
     try:
@@ -84,7 +53,7 @@ def _validate_iso_date(raw: str, *, field_name: str) -> None:
 
 def register_analytics_tools(mcp: FastMCP, client: SpendwiseClient) -> None:
 
-    @mcp.tool(
+    @instrument_tool(mcp,
         name="analytics_monthly_summary",
         description=(
             "Return a monthly spending summary for the specified month (YYYY-MM format). "
@@ -94,23 +63,12 @@ def register_analytics_tools(mcp: FastMCP, client: SpendwiseClient) -> None:
     async def analytics_monthly_summary(
         telegram_user_id: str,
         month: str,
-        telegram_username: str | None = None,
-        first_name: str | None = None,
-        last_name: str | None = None,
     ) -> MonthlySummary:
         _validate_month(month)
 
-        api_key = await _resolve_api_key(
-            client,
-            telegram_user_id,
-            telegram_username,
-            first_name,
-            last_name,
-        )
+        return await client.get_monthly_summary(month, telegram_user_id=telegram_user_id)
 
-        return await client.get_monthly_summary(month, api_key=api_key)
-
-    @mcp.tool(
+    @instrument_tool(mcp,
         name="analytics_category_summary",
         description=(
             "Return per-category spending totals for a given month (YYYY-MM format)."
@@ -119,23 +77,12 @@ def register_analytics_tools(mcp: FastMCP, client: SpendwiseClient) -> None:
     async def analytics_category_summary(
         telegram_user_id: str,
         month: str,
-        telegram_username: str | None = None,
-        first_name: str | None = None,
-        last_name: str | None = None,
     ) -> List[CategorySummary]:
         _validate_month(month)
 
-        api_key = await _resolve_api_key(
-            client,
-            telegram_user_id,
-            telegram_username,
-            first_name,
-            last_name,
-        )
+        return await client.get_category_summary(month, telegram_user_id=telegram_user_id)
 
-        return await client.get_category_summary(month, api_key=api_key)
-
-    @mcp.tool(
+    @instrument_tool(mcp,
         name="analytics_trend",
         description=(
             "Return daily spending totals for a given inclusive date range (YYYY-MM-DD)."
@@ -145,24 +92,13 @@ def register_analytics_tools(mcp: FastMCP, client: SpendwiseClient) -> None:
         telegram_user_id: str,
         from_date: str,
         to_date: str,
-        telegram_username: str | None = None,
-        first_name: str | None = None,
-        last_name: str | None = None,
     ) -> List[DailyTrend]:
         _validate_iso_date(from_date, field_name="from_date")
         _validate_iso_date(to_date, field_name="to_date")
 
-        api_key = await _resolve_api_key(
-            client,
-            telegram_user_id,
-            telegram_username,
-            first_name,
-            last_name,
-        )
+        return await client.get_trend(from_date, to_date, telegram_user_id=telegram_user_id)
 
-        return await client.get_trend(from_date, to_date, api_key=api_key)
-
-    @mcp.tool(
+    @instrument_tool(mcp,
         name="analytics_outliers",
         description=(
             "Return unusual or anomalous spending entries for a given month (YYYY-MM format)."
@@ -171,18 +107,7 @@ def register_analytics_tools(mcp: FastMCP, client: SpendwiseClient) -> None:
     async def analytics_outliers(
         telegram_user_id: str,
         month: str,
-        telegram_username: str | None = None,
-        first_name: str | None = None,
-        last_name: str | None = None,
     ) -> List[dict]:
         _validate_month(month)
 
-        api_key = await _resolve_api_key(
-            client,
-            telegram_user_id,
-            telegram_username,
-            first_name,
-            last_name,
-        )
-
-        return await client.get_outliers(month, api_key=api_key)
+        return await client.get_outliers(month, telegram_user_id=telegram_user_id)

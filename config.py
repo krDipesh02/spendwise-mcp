@@ -30,13 +30,18 @@ DEFAULT_MCP_PORT = 9000
 DEFAULT_HTTP_TIMEOUT_SECONDS = 15.0
 DEFAULT_LOG_LEVEL = "info"
 DEFAULT_STREAMABLE_HTTP_PATH = "/mcp"
-DEFAULT_AUTOMATION_SERVICE_TOKEN = "changeme-service-token"
-DEFAULT_MCP_AUTH_TOKEN = DEFAULT_AUTOMATION_SERVICE_TOKEN
+DEFAULT_AUTOMATION_SERVICE_TOKEN = ""
+DEFAULT_MCP_AUTH_TOKEN = ""
 
 def _as_bool(raw: str | None, default: bool) -> bool:
-    if raw is None:
+    if raw is None or not raw.strip():
         return default
     return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _env_or_default(name: str, default: str) -> str:
+    value = os.getenv(name)
+    return value.strip() if value and value.strip() else default
 
 @dataclass(frozen=True)
 class Settings:
@@ -53,18 +58,18 @@ class Settings:
 
 def get_settings() -> Settings:
     return Settings(
-        backend_base_url=os.getenv("SPENDWISE_BACKEND_BASE_URL", DEFAULT_BACKEND_BASE_URL).rstrip("/"),
-        mcp_host=os.getenv("MCP_HOST", DEFAULT_MCP_HOST),
-        mcp_port=int(os.getenv("MCP_PORT", str(DEFAULT_MCP_PORT))),
+        backend_base_url=_env_or_default("SPENDWISE_BACKEND_BASE_URL", DEFAULT_BACKEND_BASE_URL).rstrip("/"),
+        mcp_host=_env_or_default("MCP_HOST", DEFAULT_MCP_HOST),
+        mcp_port=int(_env_or_default("MCP_PORT", str(DEFAULT_MCP_PORT))),
         http_timeout_seconds=float(
-            os.getenv("SPENDWISE_HTTP_TIMEOUT_SECONDS", str(DEFAULT_HTTP_TIMEOUT_SECONDS))
+            _env_or_default("SPENDWISE_HTTP_TIMEOUT_SECONDS", str(DEFAULT_HTTP_TIMEOUT_SECONDS))
         ),
-        log_level=os.getenv("MCP_LOG_LEVEL", DEFAULT_LOG_LEVEL),
+        log_level=_env_or_default("MCP_LOG_LEVEL", DEFAULT_LOG_LEVEL),
         verify_ssl=_as_bool(os.getenv("SPENDWISE_VERIFY_SSL"), True),
-        streamable_http_path=os.getenv("MCP_STREAMABLE_HTTP_PATH", DEFAULT_STREAMABLE_HTTP_PATH),
-        automation_service_token=os.getenv("SPENDWISE_AUTOMATION_SERVICE_TOKEN", DEFAULT_AUTOMATION_SERVICE_TOKEN),
+        streamable_http_path=_env_or_default("MCP_STREAMABLE_HTTP_PATH", DEFAULT_STREAMABLE_HTTP_PATH),
+        automation_service_token=_env_or_default("SPENDWISE_AUTOMATION_SERVICE_TOKEN", DEFAULT_AUTOMATION_SERVICE_TOKEN),
         mcp_auth_token=os.getenv(
             "MCP_AUTH_TOKEN",
-            os.getenv("SPENDWISE_AUTOMATION_SERVICE_TOKEN", DEFAULT_MCP_AUTH_TOKEN),
-        ),
+            DEFAULT_MCP_AUTH_TOKEN,
+        ).strip() or DEFAULT_MCP_AUTH_TOKEN,
     )
