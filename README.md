@@ -1,25 +1,28 @@
-# Spendwise MCP
+# SpendWise MCP
 
-## Telegram business request identity
+`spendwise-mcp` is the Model Context Protocol server that exposes SpendWise business capabilities to `spendwise_agent`. It translates agent tool calls into backend REST operations.
 
-Telegram enrollment and authorization belong to `task-automation-bot` and
-`spendwise-backend`; this MCP server exposes only business tools. The bot checks
-authorization directly with the backend before invoking an agent. For business
-tool calls it supplies a trusted Telegram identity in the MCP request context;
-the bot's MCP interceptor overwrites any model-provided `telegram_user_id`.
-The MCP server then sends that identity with its backend service credential.
-The backend resolves the Telegram account to the canonical SpendWise user ID
-and uses that user for business operations.
+## Role in the system
 
-Configure `MCP_AUTH_TOKEN` as a distinct secret for bot-to-MCP access, and
-`SPENDWISE_AUTOMATION_SERVICE_TOKEN` for MCP-to-backend business calls. The
-backend also has a bot-only `SPENDWISE_TELEGRAM_SERVICE_TOKEN` for webhook
-authorization and invite activation, plus a separate administrator token.
-Keep these credentials separate from one another and from the Telegram bot
-token.
+The MCP server sits between the agent and `spendwise-backend`. It exposes business operations such as working with expenses, categories, budgets, and analytics. The backend remains responsible for business rules, authorization, user ownership, and persistence.
 
-## Debug logging
+```mermaid
+flowchart LR
+  Bot[Telegram bot / orchestrator] --> Agent[spendwise_agent]
+  Agent -->|MCP tool calls| MCP[spendwise-mcp]
+  MCP -->|authenticated business API| Backend[spendwise-backend]
+  Backend --> DB[(PostgreSQL)]
+```
 
-The server writes startup and shutdown details, MCP tool start/completion/failure events, and backend request method, endpoint, status, retry, and timing information to standard output. Set `MCP_LOG_LEVEL=debug` for additional diagnostic detail. The HTTP server also logs incoming MCP requests. Tool failure logs include the exception type, backend error kind/status when available, and source locations.
+## Responsibilities
 
-Logs intentionally omit tool arguments, request/response bodies, Telegram identity fields, and API keys. Backend error logs include the HTTP status and endpoint. Do not enable HTTP wire-level logging in production because it may expose credentials or user data.
+- Register and serve agent-facing SpendWise business tools.
+- Validate and translate tool inputs into backend API requests.
+- Authenticate to the backend as a service and pass trusted Telegram context where applicable.
+- Centralize backend HTTP behavior, timeout, retry, and error translation.
+- Log tool and backend request lifecycle details without logging secrets or sensitive payloads.
+
+## Boundaries
+
+MCP is not the Telegram webhook handler and does not parse Telegram updates. It must not implement invite generation, claim approval, Telegram activation, or Telegram authorization lookup. Those are application security workflows owned by the bot and backend. The LLM must not choose the authenticated user; backend derives the SpendWise user from trusted service identity context.
+
